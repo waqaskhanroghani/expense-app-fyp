@@ -9,13 +9,16 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
+      "bundleIdentifier": "com.waqaskhanroghani.expensetrackerapp",
       "supportsTablet": true
     },
     "android": {
+      "package": "com.waqaskhanroghani.expensetrackerapp",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "targetSdkVersion": 35
     },
     "web": {
       "bundler": "metro",
@@ -24,17 +27,25 @@
     },
     "plugins": [
       [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 35,
+            "targetSdkVersion": 35,
+            "buildToolsVersion": "35.0.0"
+          }
+        }
+      ],
+      [
         "expo-sqlite",
         {
           "enableFTS": true,
           "useSQLCipher": true,
           "android": {
-            // Override the shared configuration for Android
             "enableFTS": false,
             "useSQLCipher": false
           },
           "ios": {
-            // You can also override the shared configurations for iOS
             "customBuildFlags": [
               "-DSQLITE_ENABLE_DBSTAT_VTAB=1 -DSQLITE_ENABLE_SNAPSHOT=1"
             ]
@@ -54,6 +65,21 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "firebaseApiKey": "AIzaSyCoYeQpDNDtIyNqA7dx3uQjsCEdkvHJoR8",
+      "firebaseAuthDomain": "expense-tracker-61b67.firebaseapp.com",
+      "firebaseProjectId": "expense-tracker-61b67",
+      "firebaseStorageBucket": "expense-tracker-61b67.firebasestorage.app",
+      "firebaseMessagingSenderId": "897449965761",
+      "firebaseAppId": "1:897449965761:web:2e5b51015792854d8dbc40",
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "63c530d7-acd9-4fcd-8dba-3ad9220d56ac"
+      }
+    },
+    "owner": "waqaskhanroghani"
   }
 }
