@@ -8,6 +8,7 @@ import {
   setDoc,
   Timestamp,
   where,
+  onSnapshot,
 } from 'firebase/firestore';
 import React, {
   createContext,
@@ -19,7 +20,7 @@ import React, {
 import 'react-native-get-random-values';
 import Toast from 'react-native-toast-message';
 import { v4 as uuidv4 } from 'uuid';
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
 import { sampleTransactions } from '../data/sampleTransactions';
 import type { Transaction, TransactionContextType } from '../types';
 
@@ -50,46 +51,108 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
 
   useEffect(() => {
     const initialize = async () => {
-      await loadTransactions();
-      setLoading(false);
+      if (auth.currentUser) {
+        await loadTransactions();
+        setLoading(false);
+        
+        // Set up real-time listener for user's transactions
+        const userId = auth.currentUser.uid;
+        const transactionsRef = collection(db, 'transactions');
+        const q = query(transactionsRef, where('userId', '==', userId));
+        
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+          const serverTransactions: Transaction[] = [];
+          snapshot.forEach((doc) => {
+            const data = doc.data();
+            serverTransactions.push({
+              id: doc.id,
+              amount: data.amount,
+              category: data.category,
+              date: data.date,
+              notes: data.notes,
+              type: data.type,
+              synced: true,
+            });
+          });
+          
+          // Merge with local transactions
+          setTransactions((prev) => {
+            const localMap = new Map(prev.map((tx) => [tx.id, tx]));
+            const merged = [...prev];
+            
+            serverTransactions.forEach((serverTx) => {
+              if (!localMap.has(serverTx.id)) {
+                merged.push(serverTx);
+              }
+            });
+            
+            return merged;
+          });
+        });
+        
+        return () => unsubscribe();
+      } else {
+        setLoading(false);
+      }
     };
 
     initialize();
 
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      console.log(state.isConnected);
-      if (state.isConnected && !loading) {
+    const unsubscribeNet = NetInfo.addEventListener((state) => {
+      if (state.isConnected && !loading && auth.currentUser) {
         syncAllTransactions();
       }
     });
 
     return () => {
-      unsubscribe();
+      unsubscribeNet();
     };
-  }, [loading]);
+  }, [loading, auth.currentUser]);
 
   /**
-   * Load transactions from AsyncStorage or initialize with sample data
+   * Load transactions from AsyncStorage or Firestore
    */
   const loadTransactions = async (): Promise<void> => {
     try {
-      const storedTransactions = await AsyncStorage.getItem('transactions');
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        console.log('No user logged in');
+        return;
+      }
 
-      if (storedTransactions) {
-        setTransactions(() => JSON.parse(storedTransactions));
-      } else {
-        /**
-         * Use sample data if no stored transactions
-         */
-        const initializedTransactions = sampleTransactions.map((tx) => ({
-          ...tx,
-          synced: false, // Ensure sample transactions are marked as unsynced
-        }));
-        setTransactions(initializedTransactions);
+      // Try to load from Firestore first
+      const transactionsRef = collection(db, 'transactions');
+      const q = query(transactionsRef, where('userId', '==', userId));
+      const querySnapshot = await getDocs(q);
+
+      const firestoreTransactions: Transaction[] = [];
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        firestoreTransactions.push({
+          id: doc.id,
+          amount: data.amount,
+          category: data.category,
+          date: data.date,
+          notes: data.notes,
+          type: data.type,
+          synced: true,
+        });
+      });
+
+      if (firestoreTransactions.length > 0) {
+        setTransactions(firestoreTransactions);
         await AsyncStorage.setItem(
-          'transactions',
-          JSON.stringify(initializedTransactions)
+          `transactions_${userId}`,
+          JSON.stringify(firestoreTransactions)
         );
+      } else {
+        // Load from AsyncStorage as fallback
+        const storedTransactions = await AsyncStorage.getItem(`transactions_${userId}`);
+        if (storedTransactions) {
+          setTransactions(JSON.parse(storedTransactions));
+        } else {
+          setTransactions([]);
+        }
       }
     } catch (error) {
       console.error('Error loading transactions:', error);
@@ -108,6 +171,16 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
     newTransaction: Omit<Transaction, 'id' | 'synced'>
   ): Promise<void> => {
     try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'You must be logged in to add transactions.',
+        });
+        return;
+      }
+
       const transactionWithId: Transaction = {
         ...newTransaction,
         id: uuidv4(),
@@ -117,7 +190,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
       const updatedTransactions = [...transactions, transactionWithId];
 
       await AsyncStorage.setItem(
-        'transactions',
+        `transactions_${userId}`,
         JSON.stringify(updatedTransactions)
       );
 
@@ -154,9 +227,15 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
     lastSyncTime: string
   ): Promise<Transaction[]> => {
     try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        return [];
+      }
+
       const transactionsRef = collection(db, 'transactions');
       const q = query(
         transactionsRef,
+        where('userId', '==', userId),
         where('timestamp', '>', Timestamp.fromDate(new Date(lastSyncTime)))
       );
 
@@ -320,12 +399,15 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
    */
   const markTransactionAsSynced = async (id: string): Promise<void> => {
     try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) return;
+
       setTransactions((prevTransactions) => {
         const updatedTransactions = prevTransactions.map((tx) =>
           tx.id === id ? { ...tx, synced: true } : tx
         );
         AsyncStorage.setItem(
-          'transactions',
+          `transactions_${userId}`,
           JSON.stringify(updatedTransactions)
         ).catch((error) => {
           console.error('Error saving to AsyncStorage:', error);
@@ -342,8 +424,14 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
    */
   const uploadTransaction = async (transaction: Transaction): Promise<void> => {
     try {
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        throw new Error('User not authenticated');
+      }
+
       const transactionRef = doc(db, 'transactions', transaction.id);
       await setDoc(transactionRef, {
+        userId: userId,
         amount: transaction.amount,
         category: transaction.category,
         date: transaction.date,

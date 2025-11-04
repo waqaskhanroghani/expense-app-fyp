@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { Text, Card, useTheme, Button } from 'react-native-paper';
 import { useTransactions } from '../context/TransactionContext';
+import { useAuth } from '../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 
@@ -10,7 +11,33 @@ import { TransactionItem } from '../components/TransactionItem';
 
 export default function HomeScreen(): JSX.Element {
   const { transactions } = useTransactions();
+  const { logout, user } = useAuth();
   const theme = useTheme();
+
+  const handleLogout = async () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await logout();
+              router.replace('/login');
+            } catch (error: any) {
+              Alert.alert('Error', 'Failed to logout');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const totalIncome = transactions
     .filter((t) => t.type === 'income')
@@ -28,6 +55,17 @@ export default function HomeScreen(): JSX.Element {
 
   return (
     <ScrollView style={styles.container}>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.welcomeText}>Welcome back!</Text>
+          <Text style={styles.emailText}>{user?.email}</Text>
+        </View>
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+          <Ionicons name="log-out-outline" size={24} color={theme.colors.error} />
+          <Text style={[styles.logoutText, { color: theme.colors.error }]}>Logout</Text>
+        </TouchableOpacity>
+      </View>
+
       <Animated.View entering={FadeInUp.delay(200).duration(1000)}>
         <Card style={styles.balanceCard}>
           <Card.Content>
@@ -110,6 +148,35 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     backgroundColor: '#f5f5f5',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    elevation: 2,
+  },
+  welcomeText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  emailText: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  logoutText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   balanceCard: {
     marginBottom: 16,
