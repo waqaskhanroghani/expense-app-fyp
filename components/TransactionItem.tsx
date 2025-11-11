@@ -4,6 +4,7 @@ import { Text, useTheme } from "react-native-paper";
 
 import { Ionicons } from "@expo/vector-icons";
 import type { Transaction } from "../types";
+import { formatCurrency } from "../utils/currency";
 
 interface TransactionItemProps {
   transaction: Transaction;
@@ -43,7 +44,7 @@ export const TransactionItem = ({ transaction }: TransactionItemProps) => {
           },
         ]}
       >
-        ${transaction.amount.toFixed(2)}
+        {formatCurrency(transaction.amount, transaction.currency || 'USD')}
       </Text>
     </View>
   );

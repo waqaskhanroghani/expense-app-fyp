@@ -3,6 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { List, Text } from 'react-native-paper';
 import { Transaction } from '../types';
 import { useTheme } from 'react-native-paper';
+import { formatCurrency } from '../utils/currency';
 
 interface HistoryItemProps {
   item: Transaction;
@@ -41,7 +42,7 @@ export const HistoryItem: React.FC<HistoryItemProps> = ({ item, index }) => {
                 },
               ]}
             >
-              ${item.amount.toFixed(2)}
+              {formatCurrency(item.amount, item.currency || 'USD')}
             </Text>
             <Text style={styles.date}>
               {new Date(item.date).toLocaleDateString()}

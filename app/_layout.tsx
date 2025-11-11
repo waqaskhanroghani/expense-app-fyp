@@ -1,80 +1,79 @@
-import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { useEffect } from 'react';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 import { TransactionProvider } from '../context/TransactionContext';
+import { AuthProvider, useAuth } from '../context/AuthContext';
 import Toast from 'react-native-toast-message';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 
 const PRIMARY_COLOR = '#6200ee';
+
+function RootLayoutNav() {
+  const { user, loading } = useAuth();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (loading) return;
+
+    const currentRoute = segments[0];
+    const inAuthScreen = currentRoute === 'login' || currentRoute === 'register';
+    const inTabsScreen = currentRoute === '(tabs)';
+
+    if (!user) {
+      // Redirect to login if not authenticated (unless already on auth screen)
+      if (!inAuthScreen) {
+        router.replace('/login');
+      }
+    } else {
+      // Redirect to main app if authenticated (unless already on tabs screen)
+      if (!inTabsScreen && !inAuthScreen) {
+        router.replace('/(tabs)');
+      }
+    }
+  }, [user, loading, segments, router]);
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={PRIMARY_COLOR} />
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="register" options={{ headerShown: false }} />
+        <Stack.Screen 
+          name="(tabs)" 
+          options={{ headerShown: false }}
+        />
+      </Stack>
+      <Toast />
+    </>
+  );
+}
 
 export default function RootLayout() {
   return (
     <PaperProvider>
-      <TransactionProvider>
-        <Tabs
-          screenOptions={{
-        tabBarActiveTintColor: PRIMARY_COLOR,
-        tabBarInactiveTintColor: 'gray',
-        tabBarStyle: { backgroundColor: 'white' },
-        headerStyle: { backgroundColor: PRIMARY_COLOR },
-        headerTintColor: 'white',
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Dashboard',
-          tabBarIcon: ({ focused, color, size }) => (
-            <Ionicons 
-              name={focused ? 'home' : 'home-outline'} 
-              size={size} 
-              color={color} 
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="add"
-        options={{
-          title: 'Add Transaction',
-          tabBarIcon: ({ focused, color, size }) => (
-            <Ionicons 
-              name={focused ? 'add-circle' : 'add-circle-outline'} 
-              size={size} 
-              color={color} 
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="history"
-        options={{
-          title: 'Transaction History',
-          tabBarIcon: ({ focused, color, size }) => (
-            <Ionicons 
-              name={focused ? 'list' : 'list-outline'} 
-              size={size} 
-              color={color} 
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="charts"
-        options={{
-          title: 'Analytics',
-          tabBarIcon: ({ focused, color, size }) => (
-            <Ionicons 
-              name={focused ? 'pie-chart' : 'pie-chart-outline'} 
-              size={size} 
-              color={color} 
-            />
-          ),
-        }}
-      />
-    </Tabs>
-    <Toast />
-      </TransactionProvider>
+      <AuthProvider>
+        <TransactionProvider>
+          <RootLayoutNav />
+        </TransactionProvider>
+      </AuthProvider>
     </PaperProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+});
 

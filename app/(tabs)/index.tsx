@@ -1,23 +1,43 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { Text, Card, useTheme, Button } from 'react-native-paper';
-import { useTransactions } from '../context/TransactionContext';
+import { useTransactions } from '../../context/TransactionContext';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInUp } from 'react-native-reanimated';
-
 import { router } from 'expo-router';
-import { TransactionItem } from '../components/TransactionItem';
+import { TransactionItem } from '../../components/TransactionItem';
+import { formatCurrency, currencySymbols } from '../../utils/currency';
+import { Currency, Transaction } from '../../types';
 
 export default function HomeScreen(): JSX.Element {
   const { transactions } = useTransactions();
   const theme = useTheme();
 
+  // Group transactions by currency
+  const transactionsByCurrency = transactions.reduce((acc, t) => {
+    const currency = t.currency || 'USD';
+    if (!acc[currency]) {
+      acc[currency] = { income: [], expense: [] };
+    }
+    if (t.type === 'income') {
+      acc[currency].income.push(t);
+    } else {
+      acc[currency].expense.push(t);
+    }
+    return acc;
+  }, {} as Record<Currency, { income: Transaction[]; expense: Transaction[] }>);
+
+  // Calculate totals for primary currency (USD) or first available currency
+  const primaryCurrency: Currency = transactions.length > 0 && transactions[0].currency 
+    ? transactions[0].currency 
+    : 'USD';
+  
   const totalIncome = transactions
-    .filter((t) => t.type === 'income')
+    .filter((t) => t.type === 'income' && (t.currency || 'USD') === primaryCurrency)
     .reduce((sum, t) => sum + t.amount, 0);
 
   const totalExpenses = transactions
-    .filter((t) => t.type === 'expense')
+    .filter((t) => t.type === 'expense' && (t.currency || 'USD') === primaryCurrency)
     .reduce((sum, t) => sum + t.amount, 0);
 
   const balance = totalIncome - totalExpenses;
@@ -35,7 +55,7 @@ export default function HomeScreen(): JSX.Element {
             <Text
               style={[styles.balanceAmount, { color: theme.colors.primary }]}
             >
-              ${balance.toFixed(2)}
+              {formatCurrency(balance, primaryCurrency)}
             </Text>
           </Card.Content>
         </Card>
@@ -59,7 +79,7 @@ export default function HomeScreen(): JSX.Element {
               <Text
                 style={[styles.summaryAmount, { color: theme.colors.primary }]}
               >
-                ${totalIncome.toFixed(2)}
+                {formatCurrency(totalIncome, primaryCurrency)}
               </Text>
             </Card.Content>
           </Card>
@@ -81,7 +101,7 @@ export default function HomeScreen(): JSX.Element {
               <Text
                 style={[styles.summaryAmount, { color: theme.colors.error }]}
               >
-                ${totalExpenses.toFixed(2)}
+                {formatCurrency(totalExpenses, primaryCurrency)}
               </Text>
             </Card.Content>
           </Card>
@@ -97,7 +117,7 @@ export default function HomeScreen(): JSX.Element {
             ))}
           </Card.Content>
           <Card.Actions>
-            <Button onPress={() => router.push('/history')}>View All</Button>
+            <Button onPress={() => router.push('/(tabs)/history')}>View All</Button>
           </Card.Actions>
         </Card>
       </Animated.View>

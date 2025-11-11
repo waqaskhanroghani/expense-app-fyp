@@ -20,8 +20,8 @@ import 'react-native-get-random-values';
 import Toast from 'react-native-toast-message';
 import { v4 as uuidv4 } from 'uuid';
 import { db } from '../config/firebase';
-import { sampleTransactions } from '../data/sampleTransactions';
 import type { Transaction, TransactionContextType } from '../types';
+import { useAuth } from './AuthContext';
 
 const TransactionContext = createContext<TransactionContextType | undefined>(
   undefined
@@ -44,9 +44,16 @@ interface TransactionProviderProps {
 export const TransactionProvider: React.FC<TransactionProviderProps> = ({
   children,
 }) => {
+  const { user } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
+
+  // Get storage key based on user ID
+  const getStorageKey = (): string => {
+    if (!user) return 'transactions';
+    return `transactions_${user.uid}`;
+  };
 
   useEffect(() => {
     const initialize = async () => {
@@ -58,38 +65,104 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
 
     const unsubscribe = NetInfo.addEventListener((state) => {
       console.log(state.isConnected);
-      if (state.isConnected && !loading) {
-        syncAllTransactions();
-      }
+      // Firestore sync disabled - using local storage only
+      // if (state.isConnected && !loading) {
+      //   syncAllTransactions();
+      // }
     });
 
     return () => {
       unsubscribe();
     };
-  }, [loading]);
+  }, [loading, user]);
 
   /**
-   * Load transactions from AsyncStorage or initialize with sample data
+   * Load transactions from AsyncStorage or initialize with empty array
    */
   const loadTransactions = async (): Promise<void> => {
     try {
-      const storedTransactions = await AsyncStorage.getItem('transactions');
+      if (!user) {
+        setTransactions([]);
+        setLoading(false);
+        return;
+      }
+
+      const storageKey = getStorageKey();
+      const storedTransactions = await AsyncStorage.getItem(storageKey);
 
       if (storedTransactions) {
-        setTransactions(() => JSON.parse(storedTransactions));
+        const parsed = JSON.parse(storedTransactions);
+        // Migrate old transactions without currency to have USD
+        const migrated = parsed.map((tx: Transaction) => ({
+          ...tx,
+          currency: tx.currency || 'USD',
+        }));
+        setTransactions(() => migrated);
+        // Save migrated transactions back
+        await AsyncStorage.setItem(storageKey, JSON.stringify(migrated));
       } else {
         /**
-         * Use sample data if no stored transactions
+         * Initialize with sample data for demo account, empty for other users
          */
-        const initializedTransactions = sampleTransactions.map((tx) => ({
-          ...tx,
-          synced: false, // Ensure sample transactions are marked as unsynced
-        }));
-        setTransactions(initializedTransactions);
-        await AsyncStorage.setItem(
-          'transactions',
-          JSON.stringify(initializedTransactions)
-        );
+        if (user?.uid === 'demo-user-001') {
+          const demoTransactions: Transaction[] = [
+            {
+              id: uuidv4(),
+              amount: 5000,
+              currency: 'USD',
+              category: 'Salary',
+              type: 'income',
+              date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+              notes: 'Monthly salary',
+              synced: false,
+            },
+            {
+              id: uuidv4(),
+              amount: 1200,
+              currency: 'USD',
+              category: 'Rent',
+              type: 'expense',
+              date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+              notes: 'Apartment rent',
+              synced: false,
+            },
+            {
+              id: uuidv4(),
+              amount: 350,
+              currency: 'USD',
+              category: 'Groceries',
+              type: 'expense',
+              date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+              notes: 'Weekly groceries',
+              synced: false,
+            },
+            {
+              id: uuidv4(),
+              amount: 150,
+              currency: 'USD',
+              category: 'Transportation',
+              type: 'expense',
+              date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+              notes: 'Gas and parking',
+              synced: false,
+            },
+            {
+              id: uuidv4(),
+              amount: 200,
+              currency: 'USD',
+              category: 'Freelance',
+              type: 'income',
+              date: new Date().toISOString(),
+              notes: 'Side project payment',
+              synced: false,
+            },
+          ];
+          setTransactions(demoTransactions);
+          await AsyncStorage.setItem(storageKey, JSON.stringify(demoTransactions));
+        } else {
+          setTransactions([]);
+          await AsyncStorage.setItem(storageKey, JSON.stringify([]));
+        }
       }
     } catch (error) {
       console.error('Error loading transactions:', error);
@@ -115,9 +188,10 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
       };
 
       const updatedTransactions = [...transactions, transactionWithId];
+      const storageKey = getStorageKey();
 
       await AsyncStorage.setItem(
-        'transactions',
+        storageKey,
         JSON.stringify(updatedTransactions)
       );
 
@@ -127,9 +201,9 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
       ]);
 
       /**
-       * Attempt to sync after adding
+       * Attempt to sync after adding - DISABLED (using local storage only)
        */
-      await syncSingleTransaction(transactionWithId);
+      // await syncSingleTransaction(transactionWithId);
     } catch (error) {
       console.error('Error adding transaction:', error);
       Toast.show({
@@ -453,13 +527,82 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({
   };
 
   /**
+   * Update an existing transaction
+   */
+  const updateTransaction = async (
+    id: string,
+    updatedData: Partial<Transaction>
+  ): Promise<void> => {
+    try {
+      const updatedTransactions = transactions.map((tx) =>
+        tx.id === id ? { ...tx, ...updatedData } : tx
+      );
+      const storageKey = getStorageKey();
+
+      await AsyncStorage.setItem(
+        storageKey,
+        JSON.stringify(updatedTransactions)
+      );
+
+      setTransactions(updatedTransactions);
+
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Transaction updated successfully.',
+      });
+    } catch (error) {
+      console.error('Error updating transaction:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to update transaction.',
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * Delete a transaction
+   */
+  const deleteTransaction = async (id: string): Promise<void> => {
+    try {
+      const updatedTransactions = transactions.filter((tx) => tx.id !== id);
+      const storageKey = getStorageKey();
+
+      await AsyncStorage.setItem(
+        storageKey,
+        JSON.stringify(updatedTransactions)
+      );
+
+      setTransactions(updatedTransactions);
+
+      Toast.show({
+        type: 'success',
+        text1: 'Success',
+        text2: 'Transaction deleted successfully.',
+      });
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to delete transaction.',
+      });
+      throw error;
+    }
+  };
+
+  /**
    * Utility function to pause execution for a given time
    */
   const sleep = (ms: number) =>
     new Promise((resolve) => setTimeout(resolve, ms));
 
   return (
-    <TransactionContext.Provider value={{ transactions, addTransaction }}>
+    <TransactionContext.Provider
+      value={{ transactions, addTransaction, updateTransaction, deleteTransaction }}
+    >
       {children}
     </TransactionContext.Provider>
   );
