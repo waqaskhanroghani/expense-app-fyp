@@ -2,6 +2,10 @@ import 'dotenv/config';
 
 export default ({ config }) => ({
   ...config,
+  plugins: [
+    "expo-font",
+    "expo-web-browser"
+  ],
   extra: {
     ...config.extra,
     firebaseApiKey: process.env.FIREBASE_API_KEY,

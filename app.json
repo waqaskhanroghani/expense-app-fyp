@@ -3,6 +3,7 @@
     "name": "expense-tracker-app",
     "slug": "expense-tracker-app",
     "version": "1.0.0",
+    "sdkVersion": "54.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "myapp",
@@ -17,8 +18,7 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      },
-      "targetSdkVersion": 35
+      }
     },
     "web": {
       "bundler": "metro",
